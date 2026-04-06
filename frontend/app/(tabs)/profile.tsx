@@ -8,11 +8,14 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../src/context/AuthContext';
 import api from '../../src/services/api';
 
@@ -27,10 +30,11 @@ interface Stats {
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, refreshUser } = useAuth();
+  const { user, logout, refreshUser, updateProfilePhoto } = useAuth();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -52,6 +56,93 @@ export default function Profile() {
     setRefreshing(true);
     refreshUser();
     fetchStats();
+  };
+
+  const pickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission requise', 'Nous avons besoin de la permission d\'accéder à vos photos.');
+        return;
+      }
+
+      // Pick image
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setUploadingPhoto(true);
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        
+        try {
+          await updateProfilePhoto(base64Image);
+          Alert.alert('Succès', 'Photo de profil mise à jour !');
+        } catch (error: any) {
+          Alert.alert('Erreur', error.message || 'Impossible de mettre à jour la photo');
+        } finally {
+          setUploadingPhoto(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Erreur', 'Impossible de sélectionner l\'image');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      // Request camera permission
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission requise', 'Nous avons besoin de la permission d\'utiliser la caméra.');
+        return;
+      }
+
+      // Take photo
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        setUploadingPhoto(true);
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        
+        try {
+          await updateProfilePhoto(base64Image);
+          Alert.alert('Succès', 'Photo de profil mise à jour !');
+        } catch (error: any) {
+          Alert.alert('Erreur', error.message || 'Impossible de mettre à jour la photo');
+        } finally {
+          setUploadingPhoto(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Erreur', 'Impossible de prendre la photo');
+    }
+  };
+
+  const showPhotoOptions = () => {
+    Alert.alert(
+      'Photo de profil',
+      'Comment voulez-vous ajouter une photo ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Prendre une photo', onPress: takePhoto },
+        { text: 'Choisir dans la galerie', onPress: pickImage },
+      ]
+    );
   };
 
   const handleLogout = () => {
@@ -92,16 +183,35 @@ export default function Profile() {
       >
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
-            <LinearGradient
-              colors={['#e94560', '#ff6b6b']}
-              style={styles.avatar}
-            >
-              <Text style={styles.avatarText}>
-                {user?.name?.charAt(0).toUpperCase() || '?'}
-              </Text>
-            </LinearGradient>
-          </View>
+          <TouchableOpacity 
+            style={styles.avatarContainer} 
+            onPress={showPhotoOptions}
+            disabled={uploadingPhoto}
+          >
+            {user?.profile_photo ? (
+              <Image 
+                source={{ uri: user.profile_photo }} 
+                style={styles.avatarImage}
+              />
+            ) : (
+              <LinearGradient
+                colors={['#e94560', '#ff6b6b']}
+                style={styles.avatar}
+              >
+                <Text style={styles.avatarText}>
+                  {user?.name?.charAt(0).toUpperCase() || '?'}
+                </Text>
+              </LinearGradient>
+            )}
+            <View style={styles.editBadge}>
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera" size={16} color="#fff" />
+              )}
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.changePhotoText}>Appuyez pour changer la photo</Text>
           <Text style={styles.userName}>{user?.name || 'Utilisateur'}</Text>
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
         </View>
@@ -150,6 +260,15 @@ export default function Profile() {
           </View>
         </View>
 
+        {/* Timer Info */}
+        <View style={styles.infoCard}>
+          <View style={styles.infoRow}>
+            <Ionicons name="time-outline" size={24} color="#e94560" />
+            <Text style={styles.infoLabel}>Nouvelle énigme toutes les</Text>
+            <Text style={styles.infoValue}>2h</Text>
+          </View>
+        </View>
+
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color="#ef4444" />
@@ -177,7 +296,8 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   avatarContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
+    position: 'relative',
   },
   avatar: {
     width: 100,
@@ -186,10 +306,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#e94560',
+  },
   avatarText: {
     fontSize: 40,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#e94560',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#1a1a2e',
+  },
+  changePhotoText: {
+    fontSize: 12,
+    color: '#a0a0a0',
+    marginBottom: 12,
   },
   userName: {
     fontSize: 24,
@@ -239,7 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -267,6 +412,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.3)',
+    marginTop: 8,
   },
   logoutText: {
     color: '#ef4444',

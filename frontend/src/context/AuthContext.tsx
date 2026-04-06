@@ -8,6 +8,7 @@ interface User {
   name: string;
   score: number;
   riddles_solved: number;
+  profile_photo?: string | null;
 }
 
 interface AuthContextType {
@@ -17,6 +18,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfilePhoto: (photo: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -105,8 +107,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const updateProfilePhoto = async (photo: string) => {
+    try {
+      const response = await api.put('/auth/profile-photo', { photo });
+      setUser(prev => prev ? { ...prev, profile_photo: response.data.profile_photo } : null);
+    } catch (error: any) {
+      throw new Error(error.response?.data?.detail || 'Erreur lors de la mise à jour de la photo');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, updateProfilePhoto }}>
       {children}
     </AuthContext.Provider>
   );

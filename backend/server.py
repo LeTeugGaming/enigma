@@ -91,6 +91,9 @@ class HistoryEntry(BaseModel):
     points_earned: int
     answered_at: datetime
 
+class UpdateProfilePhoto(BaseModel):
+    photo: str  # Base64 encoded image
+
 # ============ Password Utilities ============
 
 def hash_password(password: str) -> str:
@@ -324,8 +327,26 @@ async def get_me(request: Request):
         "email": user["email"],
         "name": user["name"],
         "score": user.get("score", 0),
-        "riddles_solved": user.get("riddles_solved", 0)
+        "riddles_solved": user.get("riddles_solved", 0),
+        "profile_photo": user.get("profile_photo", None)
     }
+
+@api_router.put("/auth/profile-photo")
+async def update_profile_photo(photo_data: UpdateProfilePhoto, request: Request):
+    """Update user's profile photo (base64 encoded)"""
+    user = await get_current_user(request)
+    
+    # Validate base64 image
+    if not photo_data.photo.startswith("data:image"):
+        raise HTTPException(status_code=400, detail="Format d'image invalide. Utilisez base64.")
+    
+    # Update user's profile photo
+    await db.users.update_one(
+        {"_id": ObjectId(user["_id"])},
+        {"$set": {"profile_photo": photo_data.photo}}
+    )
+    
+    return {"message": "Photo de profil mise à jour", "profile_photo": photo_data.photo}
 
 # ============ Riddle Endpoints ============
 
