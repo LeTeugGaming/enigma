@@ -54,7 +54,8 @@ export default function Home() {
       // Calculate time left
       const expiresAt = new Date(response.data.expires_at).getTime();
       const now = Date.now();
-      setTimeLeft(Math.max(0, Math.floor((expiresAt - now) / 1000)));
+      const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
+      setTimeLeft(remaining);
     } catch (error: any) {
       console.error('Error fetching riddle:', error);
     } finally {
@@ -65,24 +66,25 @@ export default function Home() {
 
   useEffect(() => {
     fetchRiddle();
-  }, [fetchRiddle]);
+  }, []);
 
-  // Countdown timer
+  // Countdown timer - runs every second
   useEffect(() => {
-    if (timeLeft <= 0) return;
-    
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
-          fetchRiddle(); // Fetch new riddle when time expires
+        if (prev <= 0) {
           return 0;
+        }
+        if (prev === 1) {
+          // Time just expired, fetch new riddle
+          setTimeout(() => fetchRiddle(), 1000);
         }
         return prev - 1;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, fetchRiddle]);
+  }, []);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);

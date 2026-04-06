@@ -357,7 +357,13 @@ async def get_current_riddle(request: Request):
     
     now = datetime.now(timezone.utc)
     
-    # Find active riddle
+    # Deactivate expired riddles first
+    await db.riddles.update_many(
+        {"expires_at": {"$lt": now}, "is_active": True},
+        {"$set": {"is_active": False}}
+    )
+    
+    # Find active riddle that hasn't expired
     active_riddle = await db.riddles.find_one({
         "is_active": True,
         "expires_at": {"$gt": now}
@@ -365,6 +371,7 @@ async def get_current_riddle(request: Request):
     
     if not active_riddle:
         # Generate new riddle
+        logger.info("No active riddle found, generating new one...")
         riddle_data = await generate_riddle_with_ai()
         
         new_riddle = {

@@ -32,10 +32,14 @@ export default function Login() {
 
     setLoading(true);
     try {
-      await login(email, password);
+      console.log('Attempting login with:', email);
+      await login(email.trim().toLowerCase(), password);
+      console.log('Login successful, redirecting...');
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      Alert.alert('Erreur', error.message || 'Connexion échouée');
+      console.log('Login error:', error);
+      const errorMessage = error.message || 'Connexion échouée. Vérifiez votre connexion internet.';
+      Alert.alert('Erreur de connexion', errorMessage);
     } finally {
       setLoading(false);
     }
