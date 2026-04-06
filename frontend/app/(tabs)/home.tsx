@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -35,13 +35,21 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showHint, setShowHint] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(7200); // Default 2 hours
   const [refreshing, setRefreshing] = useState(false);
   const [result, setResult] = useState<{
     is_correct: boolean;
     correct_answer: string;
     message: string;
   } | null>(null);
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeLeftRef = useRef(timeLeft);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    timeLeftRef.current = timeLeft;
+  }, [timeLeft]);
 
   const fetchRiddle = useCallback(async () => {
     try {
@@ -56,6 +64,7 @@ export default function Home() {
       const now = Date.now();
       const remaining = Math.max(0, Math.floor((expiresAt - now) / 1000));
       setTimeLeft(remaining);
+      timeLeftRef.current = remaining;
     } catch (error: any) {
       console.error('Error fetching riddle:', error);
     } finally {
@@ -64,27 +73,39 @@ export default function Home() {
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchRiddle();
   }, []);
 
-  // Countdown timer - runs every second
+  // Countdown timer - uses setInterval with proper cleanup
   useEffect(() => {
-    const timer = setInterval(() => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    timerRef.current = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 0) {
-          return 0;
+        const newValue = prev > 0 ? prev - 1 : 0;
+        
+        // When timer reaches 0, fetch new riddle
+        if (newValue === 0 && prev > 0) {
+          setTimeout(() => {
+            fetchRiddle();
+          }, 500);
         }
-        if (prev === 1) {
-          // Time just expired, fetch new riddle
-          setTimeout(() => fetchRiddle(), 1000);
-        }
-        return prev - 1;
+        
+        return newValue;
       });
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [fetchRiddle]);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -170,7 +191,14 @@ export default function Home() {
             </View>
           </View>
 
-          <Text style={styles.riddleQuestion}>{riddle?.question}</Text>
+          {riddle?.question ? (
+            <Text style={styles.riddleQuestion}>{riddle.question}</Text>
+          ) : (
+            <View style={styles.loadingQuestion}>
+              <ActivityIndicator size="small" color="#e94560" />
+              <Text style={styles.loadingQuestionText}>Chargement de l'énigme...</Text>
+            </View>
+          )}
 
           <View style={styles.pointsContainer}>
             <Ionicons name="diamond" size={16} color="#e94560" />
@@ -360,6 +388,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 30,
     marginBottom: 16,
+  },
+  loadingQuestion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadingQuestionText: {
+    color: '#a0a0a0',
+    fontSize: 14,
+    marginLeft: 10,
   },
   pointsContainer: {
     flexDirection: 'row',

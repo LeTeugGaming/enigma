@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import api from '../services/api';
 
 interface User {
@@ -35,6 +36,43 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Safe storage wrapper for cross-platform compatibility
+const safeStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === 'web') {
+        return localStorage.getItem(key);
+      }
+      return await AsyncStorage.getItem(key);
+    } catch (e) {
+      console.log('Storage getItem error:', e);
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.setItem(key, value);
+      } else {
+        await AsyncStorage.setItem(key, value);
+      }
+    } catch (e) {
+      console.log('Storage setItem error:', e);
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    try {
+      if (Platform.OS === 'web') {
+        localStorage.removeItem(key);
+      } else {
+        await AsyncStorage.removeItem(key);
+      }
+    } catch (e) {
+      console.log('Storage removeItem error:', e);
+    }
+  }
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await safeStorage.getItem('auth_token');
       if (token) {
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         const response = await api.get('/auth/me');
@@ -53,7 +91,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.log('Not authenticated');
-      await AsyncStorage.removeItem('auth_token');
+      await safeStorage.removeItem('auth_token');
       delete api.defaults.headers.common['Authorization'];
     } finally {
       setLoading(false);
@@ -65,7 +103,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await api.post('/auth/login', { email, password });
       const { token, ...userData } = response.data;
       
-      await AsyncStorage.setItem('auth_token', token);
+      await safeStorage.setItem('auth_token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(userData);
     } catch (error: any) {
@@ -78,7 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await api.post('/auth/register', { email, password, name });
       const { token, ...userData } = response.data;
       
-      await AsyncStorage.setItem('auth_token', token);
+      await safeStorage.setItem('auth_token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(userData);
     } catch (error: any) {
@@ -92,7 +130,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.log('Logout error:', error);
     } finally {
-      await AsyncStorage.removeItem('auth_token');
+      await safeStorage.removeItem('auth_token');
       delete api.defaults.headers.common['Authorization'];
       setUser(null);
     }
